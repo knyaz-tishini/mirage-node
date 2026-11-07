@@ -1,0 +1,66 @@
+[package]
+license = "MIT"
+name = "mirage-node"
+version = "0.1.0"
+edition = "2021"
+description = "Mirage data plane as a library: runtime, listeners, chain splice, and exit. No fleet dependency."
+repository = "https://github.com/knyaz-tishini/mirage-node"
+homepage = "https://github.com/knyaz-tishini/mirage-node"
+[features]
+default = []
+# VPS deploys: the shared store at /var/lib/mirage/state.db is SQLCipher
+# encrypted (operator-delivered db-key). Without this the node links plain
+# bundled SQLite (shared-store) and `open_with_key` skips PRAGMA key ->
+# "file is not a database" on the encrypted store -> boot crash. musl deploy
+# builds MUST pass `--features sqlcipher` (build-musl.sh does). Dev/Windows
+# native builds omit it (plain shared-store, no OpenSSL/Perl needed).
+#
+# The fleet binary's crate forwards this feature to this one.
+sqlcipher = ["mirage-core/sqlcipher"]
+
+[lib]
+name = "mirage_node"
+path = "src/lib.rs"
+
+[[bin]]
+name = "keygen"
+path = "src/bin/keygen.rs"
+
+[dependencies]
+mirage-core       = { path = "../../../mirage-oss/crates/mirage-core", features = ["shared-store"] }
+mirage-mux      = { path = "../../../mirage-oss/crates/mirage-mux", features = ["tokio-compat"] }
+mirage-protocol = { path = "../../../mirage-oss/crates/mirage-protocol" }
+# The customer-facing half (module `client`) needs the session wire, the
+# subscriber gate and the edge-session types — all deep libraries, no fleet.
+mirage-control-plane = { path = "../../../mirage-oss/crates/mirage-dial-core" }
+mirage-subscriber-gate = { path = "../../../mirage-oss/crates/mirage-subscriber-gate" }
+tokio           = { version = "1", features = ["full"] }
+# Already present transitively (see Cargo.lock) via other deps; promoted to a
+# direct dep for `tokio_util::sync::CancellationToken`, the lifecycle
+# mechanism `core::udp_chain_splice` uses to prove its reader and every live
+# session actually stop on cancellation — the same type mirage-perimeter
+# already uses for the identical proof.
+tokio-util      = "0.7"
+tracing         = "0.1"
+serde           = { version = "1", features = ["derive"] }
+serde_json      = "1"
+reqwest         = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "socks"] }
+futures         = "0.3"
+arc-swap        = "1"
+thiserror       = "2"
+rand            = "0.8"
+x25519-dalek    = { version = "2", features = ["static_secrets"] }
+blake3          = "1"
+hex             = "0.4"
+uuid            = { version = "1", features = ["v4"] }
+chacha20        = "0.9"
+async-trait     = "0.1"
+socket2         = { version = "0.5", features = ["all"] }
+ed25519-dalek   = { version = "2", features = ["rand_core"] }
+axum            = "0.8"
+
+[dev-dependencies]
+# `tokio::time::advance` and `Runtime::start_paused` live behind tokio's
+# `test-util` feature, and the crate's own tests use both. Without it the
+# test build does not compile at all.
+tokio = { version = "1", features = ["full", "test-util"] }
